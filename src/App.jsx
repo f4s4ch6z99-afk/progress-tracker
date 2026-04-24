@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from "firebase/auth";
 import {
   addDoc,
@@ -22,7 +23,6 @@ import { auth, db, enableAuthPersistence } from "./firebase";
 const POINT_GOAL = 50000;
 const CASE_GOAL = 40;
 const DEADLINE = new Date("2026-11-05T23:59:59");
-const PASSCODE = "2026";
 const milestoneLevels = [10000, 25000, 40000, 50000];
 const ENTRIES_COLLECTION = "entries";
 
@@ -81,11 +81,12 @@ function getGreeting() {
 
 function cardStyle(extra = {}) {
   return {
-    background: "rgba(255,255,255,0.96)",
+    background: "rgba(255,255,255,0.94)",
     borderRadius: 24,
     padding: 18,
-    boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
-    border: "1px solid #e5e7eb",
+    boxShadow: "0 18px 44px rgba(15,23,42,0.08)",
+    border: "1px solid rgba(255,255,255,0.8)",
+    backdropFilter: "blur(12px)",
     ...extra,
   };
 }
@@ -183,19 +184,19 @@ function Field({ label, children, hint }) {
 }
 
 function InputField(props) {
-  return <input {...props} style={{ width: "100%", boxSizing: "border-box", borderRadius: 16, border: "1px solid #dbeafe", padding: "14px 14px", fontSize: 16, outline: "none", background: "white", ...props.style }} />;
+  return <input {...props} style={{ width: "100%", boxSizing: "border-box", borderRadius: 16, border: "1px solid #dbeafe", padding: "14px 14px", fontSize: 16, outline: "none", background: "rgba(255,255,255,0.98)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)", ...props.style }} />;
 }
 
 function TextareaField(props) {
-  return <textarea {...props} style={{ width: "100%", boxSizing: "border-box", borderRadius: 16, border: "1px solid #dbeafe", padding: "14px 14px", fontSize: 16, minHeight: 90, outline: "none", resize: "vertical", background: "white", ...props.style }} />;
+  return <textarea {...props} style={{ width: "100%", boxSizing: "border-box", borderRadius: 16, border: "1px solid #dbeafe", padding: "14px 14px", fontSize: 16, minHeight: 90, outline: "none", resize: "vertical", background: "rgba(255,255,255,0.98)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)", ...props.style }} />;
 }
 
 function PrimaryButton({ children, style, ...props }) {
-  return <button {...props} style={{ width: "100%", border: "none", borderRadius: 18, padding: "15px 18px", background: "linear-gradient(135deg,#2563eb,#14b8a6)", color: "white", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 12px 24px rgba(37,99,235,0.22)", ...style }}>{children}</button>;
+  return <button {...props} style={{ width: "100%", border: "none", borderRadius: 18, padding: "15px 18px", background: "linear-gradient(135deg,#1d4ed8,#0f766e)", color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.01em", cursor: "pointer", boxShadow: "0 14px 28px rgba(29,78,216,0.24)", ...style }}>{children}</button>;
 }
 
 function SmallButton({ children, background, color = "#0f172a", ...props }) {
-  return <button {...props} style={{ flex: 1, border: "none", borderRadius: 12, padding: "10px 12px", background, color, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{children}</button>;
+  return <button {...props} style={{ flex: 1, border: "none", borderRadius: 12, padding: "10px 12px", background, color, fontWeight: 700, fontSize: 13, cursor: "pointer", boxShadow: "0 8px 18px rgba(15,23,42,0.06)" }}>{children}</button>;
 }
 
 function MobileNav({ currentTab, setCurrentTab }) {
@@ -222,54 +223,34 @@ function MobileNav({ currentTab, setCurrentTab }) {
   );
 }
 
-function PasscodeScreen({ pin, setPin, onUnlock, error }) {
-  const inputRef = useRef(null);
-  const digits = [0, 1, 2, 3];
-
+function AuthScreen({
+  name,
+  setName,
+  email,
+  password,
+  setEmail,
+  setPassword,
+  authMode,
+  setAuthMode,
+  onSubmit,
+  authError,
+  authLoading,
+}) {
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#2563eb,#14b8a6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => inputRef.current?.focus()}>
-      <div style={{ width: "100%", maxWidth: 360, background: "rgba(255,255,255,0.98)", borderRadius: 28, padding: 28, textAlign: "center", boxShadow: "0 24px 60px rgba(0,0,0,0.18)" }}>
-        <div style={{ width: 82, height: 82, borderRadius: 24, margin: "0 auto 22px", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 34, background: "linear-gradient(135deg,#2563eb,#14b8a6)" }}>🔒</div>
-        <div style={{ fontSize: 30, fontWeight: 800, color: "#0f172a" }}>Dashboard</div>
-        <div style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>Enter your 4-digit passcode</div>
-        <input
-          ref={inputRef}
-          type="password"
-          inputMode="numeric"
-          autoFocus
-          maxLength={4}
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onUnlock();
-          }}
-          style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 1, height: 1 }}
-        />
-        <div onClick={() => inputRef.current?.focus()} style={{ marginTop: 24, display: "flex", justifyContent: "center", gap: 10, cursor: "text" }}>
-          {digits.map((index) => (
-            <div key={index} style={{ width: 52, height: 56, borderRadius: 16, border: error ? "1px solid #ef4444" : "1px solid #dbeafe", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#0f172a", boxSizing: "border-box" }}>
-              {pin[index] ? "•" : ""}
-            </div>
-          ))}
-        </div>
-        {error ? <div style={{ marginTop: 10, fontSize: 13, color: "#dc2626" }}>Incorrect passcode</div> : null}
-        <PrimaryButton onClick={onUnlock} style={{ marginTop: 18 }}>Unlock</PrimaryButton>
-      </div>
-    </div>
-  );
-}
-
-function AuthScreen({ email, password, setEmail, setPassword, authMode, setAuthMode, onSubmit, authError, authLoading }) {
-  return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#eff6ff,#ecfeff)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left,#dbeafe 0%,#eff6ff 34%,#ecfeff 68%,#f8fafc 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 380, ...cardStyle({ padding: 28 }) }}>
         <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a" }}>{authMode === "signin" ? "Sign in" : "Create account"}</div>
-        <div style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>Sign in once per device, then your passcode is all you’ll use day to day.</div>
+        <div style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>Sign in once per device and your progress will stay synced.</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 18, marginBottom: 18 }}>
           <button onClick={() => setAuthMode("signin")} style={{ border: "none", borderRadius: 14, padding: "10px 12px", background: authMode === "signin" ? "#111827" : "#f8fafc", color: authMode === "signin" ? "white" : "#475569", fontWeight: 700, cursor: "pointer" }}>Sign in</button>
           <button onClick={() => setAuthMode("signup")} style={{ border: "none", borderRadius: 14, padding: "10px 12px", background: authMode === "signup" ? "#111827" : "#f8fafc", color: authMode === "signup" ? "white" : "#475569", fontWeight: 700, cursor: "pointer" }}>Sign up</button>
         </div>
         <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {authMode === "signup" ? (
+            <Field label="Name">
+              <InputField type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required />
+            </Field>
+          ) : null}
           <Field label="Email"><InputField type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></Field>
           <Field label="Password"><InputField type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" required /></Field>
           {authError ? <div style={{ fontSize: 13, color: "#dc2626" }}>{authError}</div> : null}
@@ -362,12 +343,10 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [currentTab, setCurrentTab] = useState("dashboard");
   const [chartTab, setChartTab] = useState("monthly");
-  const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
-  const [error, setError] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -504,7 +483,10 @@ export default function App() {
       if (authMode === "signin") {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, {
+          displayName: name,
+        });
       }
     } catch (err) {
       setAuthError(err.message || "Authentication failed.");
@@ -589,25 +571,14 @@ export default function App() {
     }
   };
 
-  const onUnlock = () => {
-    if (pin === PASSCODE) {
-      setUnlocked(true);
-      setError(false);
-    } else {
-      setError(true);
-    }
-  };
 
-  if (!unlocked) {
-    return <PasscodeScreen pin={pin} setPin={setPin} onUnlock={onUnlock} error={error} />;
-  }
 
   if (!authChecked) {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif" }}>Loading...</div>;
   }
 
   if (!firebaseUser) {
-    return <AuthScreen email={email} password={password} setEmail={setEmail} setPassword={setPassword} authMode={authMode} setAuthMode={setAuthMode} onSubmit={handleAuthSubmit} authError={authError} authLoading={authLoading} />;
+    return <AuthScreen name={name} setName={setName} email={email} password={password} setEmail={setEmail} setPassword={setPassword} authMode={authMode} setAuthMode={setAuthMode} onSubmit={handleAuthSubmit} authError={authError} authLoading={authLoading} />;
   }
 
   const paceTone = metrics.pointsPaceDelta >= 0 ? "#059669" : "#e11d48";
@@ -615,27 +586,40 @@ export default function App() {
   const chartData = chartTab === "monthly" ? metrics.monthlyData : metrics.weeklyData;
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#eff6ff,#ecfeff)", paddingBottom: 96, color: "#0f172a" }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left,#dbeafe 0%,#eff6ff 34%,#ecfeff 68%,#f8fafc 100%)", paddingBottom: 96, color: "#0f172a" }}>
       <div style={{ maxWidth: 420, margin: "0 auto", padding: 16 }}>
-        <div style={{ borderRadius: 28, padding: 20, color: "white", background: "linear-gradient(135deg,#2563eb,#14b8a6)", boxShadow: "0 20px 50px rgba(37,99,235,0.25)", marginBottom: 18 }}>
+        <div style={{ borderRadius: 28, padding: 20, color: "white", background: "linear-gradient(135deg,#1d4ed8 0%, #0f766e 100%)", boxShadow: "0 24px 60px rgba(29,78,216,0.22)", marginBottom: 18, border: "1px solid rgba(255,255,255,0.18)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12 }}>
             <div>
               <div style={{ fontSize: 14, color: "rgba(255,255,255,0.78)" }}>{getGreeting()}</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>Dashboard</div>
               <div style={{ fontSize: 14, color: "rgba(255,255,255,0.85)", marginTop: 10, lineHeight: 1.5 }}>
-                Stay consistent. Every case moves you closer. You are building momentum, so keep going.
+                Welcome back{firebaseUser.displayName ? `, ${firebaseUser.displayName}` : ""}. Stay consistent. Every case moves you closer.
               </div>
             </div>
             <button onClick={() => signOut(auth)} style={{ border: "none", background: "rgba(255,255,255,0.18)", color: "white", borderRadius: 12, padding: "10px 12px", fontWeight: 700, cursor: "pointer" }}>Sign out</button>
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "rgba(255,255,255,0.82)" }}>{firebaseUser.email}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "rgba(255,255,255,0.82)" }}>{firebaseUser.displayName || firebaseUser.email}</div>
         </div>
 
         {entriesError ? <div style={{ ...cardStyle({ marginBottom: 16, border: "1px solid #fecaca" }), color: "#b91c1c", fontSize: 13 }}>{entriesError}</div> : null}
         {entriesLoading ? <div style={{ ...cardStyle({ marginBottom: 16 }), fontSize: 14, color: "#475569" }}>Loading your entries...</div> : null}
 
         {currentTab === "dashboard" && (
+
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={cardStyle({ padding: 16, background: "linear-gradient(135deg,rgba(255,255,255,0.96),rgba(239,246,255,0.96))" })}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700 }}>Current focus</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>Keep stacking premium consistently</div>
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", textAlign: "right" }}>
+                  <div>{formatNumber(metrics.totalPoints, 2)} pts</div>
+                  <div>{formatNumber(metrics.totalCases, 2)} cases</div>
+                </div>
+              </div>
+            </div>
             <GoalProgressCard metrics={metrics} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <StatCard title="Total Points" value={formatNumber(metrics.totalPoints, 2)} subtitle={`${formatCurrency(metrics.totalPremium)} annual premium`} emoji="🎯" gradient="linear-gradient(135deg,#2563eb,#14b8a6)" />
